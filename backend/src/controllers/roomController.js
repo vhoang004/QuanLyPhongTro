@@ -46,9 +46,9 @@ const getAllRooms = async (req, res, next) => {
           [
             sequelize.literal(`(
               SELECT COUNT(DISTINCT tenant_id) FROM (
-                SELECT c.tenant_id FROM contracts c WHERE c.room_id = room.id AND c.status = 'active' AND c.tenant_id IS NOT NULL
+                SELECT c.tenant_id FROM contracts c WHERE c.room_id = Room.id AND c.status = 'active' AND c.tenant_id IS NOT NULL
                 UNION ALL
-                SELECT jt.tenant_id FROM contracts c, JSON_TABLE(c.tenant_ids, '$[*]' COLUMNS (tenant_id INT PATH '$')) AS jt WHERE c.room_id = room.id AND c.status = 'active'
+                SELECT jt.tenant_id FROM contracts c, JSON_TABLE(c.tenant_ids, '$[*]' COLUMNS (tenant_id INT PATH '$')) AS jt WHERE c.room_id = Room.id AND c.status = 'active'
               ) AS all_tenants
             )`),
             "current_tenants",
