@@ -106,7 +106,7 @@ CREATE TABLE `accounts` (
 
 LOCK TABLES `accounts` WRITE;
 /*!40000 ALTER TABLE `accounts` DISABLE KEYS */;
-INSERT INTO `accounts` VALUES (14,'admin','$2b$10$8Zt1C9gf.ZoraLmObceI8eNb9n/Nh7N4iZChgXLJ06z5Vlc.6Fko2','admin@qlpt.com','admin','active','2026-06-24 20:34:14','2026-06-24 20:40:21',NULL,NULL),(15,'manager','$2b$10$8Zt1C9gf.ZoraLmObceI8eNb9n/Nh7N4iZChgXLJ06z5Vlc.6Fko2','viethoang101004@gmail.com','manager','active','2026-06-24 20:34:15','2026-06-24 20:40:21',NULL,NULL);
+INSERT INTO `accounts` VALUES (17,'admin','$2b$10$4T0trPtWaNj67sbhh8XbgORhHHRwV01ojs45g/2A6Pn4wrWgLtNTW','admin@qlpt.com','admin','active','2026-06-24 20:34:14','2026-06-24 20:40:21',NULL,NULL),(15,'manager','$2b$10$4T0trPtWaNj67sbhh8XbgORhHHRwV01ojs45g/2A6Pn4wrWgLtNTW','viethoang101004@gmail.com','manager','active','2026-06-24 20:34:15','2026-06-24 20:40:21',NULL,NULL);
 /*!40000 ALTER TABLE `accounts` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
