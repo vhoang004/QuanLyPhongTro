@@ -3,12 +3,12 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install
 
 COPY . .
 
-RUN mkdir -p uploads && chmod 755 uploads
+RUN mkdir -p uploads
 
 EXPOSE 5000
 
-CMD ["node", "server.js"]
+CMD ["npm", "start"]

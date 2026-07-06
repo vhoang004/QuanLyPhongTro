@@ -1,12 +1,11 @@
-FROM node:20-alpine AS builder
+FROM node:20-alpine as build
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 COPY . .
-
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 
@@ -14,9 +13,22 @@ RUN npm run build
 
 FROM nginx:alpine
 
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=build /app/dist /usr/share/nginx/html
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN echo 'server { \
+    listen 80; \
+    server_name localhost; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    location / { \
+        try_files $uri $uri/ /index.html; \
+    } \
+    location /api { \
+        proxy_pass http://qlpt_backend:5000/api; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

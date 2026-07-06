@@ -96,6 +96,10 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log("✅ MySQL Connected: " + process.env.DB_NAME);
 
+    // Sync database tables (create if not exist)
+    await sequelize.sync();
+    console.log("✅ Database tables synchronized");
+
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📚 API Docs: http://localhost:${PORT}/`);

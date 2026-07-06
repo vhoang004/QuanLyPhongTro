@@ -1,9 +1,6 @@
-node_modules/
-npm-debug.log*
-.git/
+node_modules
+.git
 .gitignore
 .env
 .env.*
 *.md
-uploads/
-database/
