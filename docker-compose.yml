@@ -35,8 +35,8 @@ services:
       DB_HOST: mysql
       DB_PORT: 3306
       DB_NAME: quanlyphongtro
-      DB_USER: qlpt
-      DB_PASSWORD: qlpt123
+      DB_USER: root
+      DB_PASSWORD: root
       JWT_SECRET: QLPT_SECRET_KEY_2026
       EMAIL_HOST: smtp.gmail.com
       EMAIL_PORT: 587
