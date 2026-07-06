@@ -25,16 +25,17 @@ services:
     container_name: qlpt_backend
     restart: unless-stopped
     depends_on:
-      mysql:
-        condition: service_healthy
+      - mysql
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       PORT: 5000
       CLIENT_URL: ${CLIENT_URL:-http://localhost}
-      DB_HOST: mysql
+      DB_HOST: host.docker.internal
       DB_PORT: 3306
       DB_NAME: quanlyphongtro
-      DB_USER: qlpt
-      DB_PASSWORD: qlpt123
+      DB_USER: root
+      DB_PASSWORD: root
       JWT_SECRET: ${JWT_SECRET:-my_secret_key_docker}
       EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
       EMAIL_PORT: ${EMAIL_PORT:-587}
