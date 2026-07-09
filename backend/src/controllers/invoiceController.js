@@ -6,6 +6,21 @@ const { Op } = require("sequelize");
 const { paginateQuery, buildPaginationResponse, formatMonth, paginate } = require("../services/helpers");
 const { generateVietQR } = require("../services/vietqrService");
 
+function parseBillingMonth(input) {
+  if (!input) return null;
+  const str = String(input);
+  const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(str);
+  if (!m) return null;
+  const year = parseInt(m[1], 10);
+  const month = parseInt(m[2], 10);
+  if (month < 1 || month > 12) return null;
+  const day = m[3] ? parseInt(m[3], 10) : 1;
+  const dateStr = `${m[1]}-${m[2]}-${String(day).padStart(2, '0')}`;
+  const parsed = new Date(dateStr + 'T00:00:00Z');
+  if (isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
 const getAllInvoices = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, status, billing_month, room_id, search } = req.query;
@@ -94,6 +109,11 @@ const generateInvoice = async (req, res, next) => {
       return res.status(400).json({ message: "Contract ID va billing_month la bat buoc." });
     }
 
+    const billingMonthDate = parseBillingMonth(billing_month);
+    if (!billingMonthDate) {
+      return res.status(400).json({ message: "billing_month khong hop le (YYYY-MM)." });
+    }
+
     const contract = await Contract.findByPk(contract_id, {
       include: [{ model: Room, as: "room" }],
     });
@@ -107,7 +127,7 @@ const generateInvoice = async (req, res, next) => {
     }
 
     const existing = await Invoice.findOne({
-      where: { contract_id, billing_month },
+      where: { contract_id, billing_month: billingMonthDate },
     });
     if (existing) {
       return res.status(409).json({
@@ -117,10 +137,10 @@ const generateInvoice = async (req, res, next) => {
     }
 
     const electricityService = await Service.findOne({
-      where: { service_name: { [Op.like]: "%dien%" } },
+      where: { service_name: { [Op.like]: "%Điện%" } },
     });
     const waterService = await Service.findOne({
-      where: { service_name: { [Op.like]: "%nuoc%" } },
+      where: { service_name: { [Op.like]: "%Nước%" } },
     });
 
     let electricityAmount = 0;
@@ -129,19 +149,29 @@ const generateInvoice = async (req, res, next) => {
     let serviceDetails = [];
 
     const meterReading = await MeterReading.findOne({
-      where: { room_id: contract.room_id, billing_month },
+      where: { room_id: contract.room_id, billing_month: billingMonthDate },
     });
+    console.log(`[generateInvoice] room=${contract.room?.room_number} billing=${billing_month} meterReading=${meterReading ? JSON.stringify({prev_e:meterReading.prev_electricity,cur_e:meterReading.current_electricity,prev_w:meterReading.prev_water,cur_w:meterReading.current_water}) : 'NULL'}`);
 
-    if (meterReading) {
+    if (!meterReading) {
+      return res.status(400).json({
+        message: `Chua nhap chi so dong ho cho phong ${contract.room?.room_number} ky ${billing_month}. Vui long nhap chi so dien nuoc truoc khi tao hoa don.`,
+      });
+    }
+
+    if (electricityService) {
       const elecUsed = meterReading.current_electricity - meterReading.prev_electricity;
+      electricityAmount = parseFloat((elecUsed * parseFloat(electricityService.unit_price)).toFixed(2));
+      console.log(`[generateInvoice] elec_unit_price=${electricityService.unit_price} used=${elecUsed} amount=${electricityAmount}`);
+    } else {
+      console.log(`[generateInvoice] WARN: electricityService not found`);
+    }
+    if (waterService) {
       const waterUsed = meterReading.current_water - meterReading.prev_water;
-
-      if (electricityService) {
-        electricityAmount = parseFloat((elecUsed * parseFloat(electricityService.unit_price)).toFixed(2));
-      }
-      if (waterService) {
-        waterAmount = parseFloat((waterUsed * parseFloat(waterService.unit_price)).toFixed(2));
-      }
+      waterAmount = parseFloat((waterUsed * parseFloat(waterService.unit_price)).toFixed(2));
+      console.log(`[generateInvoice] water_unit_price=${waterService.unit_price} used=${waterUsed} amount=${waterAmount}`);
+    } else {
+      console.log(`[generateInvoice] WARN: waterService not found`);
     }
 
     const adjustments = await Adjustment.findAll({
@@ -151,8 +181,8 @@ const generateInvoice = async (req, res, next) => {
     const otherServices = await Service.findAll({
       where: {
         [Op.and]: [
-          { service_name: { [Op.notLike]: "%dien%" } },
-          { service_name: { [Op.notLike]: "%nuoc%" } },
+          { service_name: { [Op.notLike]: "%Điện%" } },
+          { service_name: { [Op.notLike]: "%Nước%" } },
         ],
       },
     });
@@ -190,7 +220,7 @@ const generateInvoice = async (req, res, next) => {
 
     const invoice = await Invoice.create({
       contract_id,
-      billing_month,
+      billing_month: billingMonthDate,
       room_price: contract.price_per_month,
       electricity_amount: electricityAmount,
       water_amount: waterAmount,
@@ -224,6 +254,11 @@ const generateBatchInvoices = async (req, res, next) => {
       return res.status(400).json({ message: "billing_month la bat buoc." });
     }
 
+    const billingMonthDate = parseBillingMonth(billing_month);
+    if (!billingMonthDate) {
+      return res.status(400).json({ message: "billing_month khong hop le (YYYY-MM)." });
+    }
+
     const activeContracts = await Contract.findAll({
       where: { status: "active" },
       include: [{ model: Room, as: "room" }],
@@ -233,8 +268,8 @@ const generateBatchInvoices = async (req, res, next) => {
     const otherServices = await Service.findAll({
       where: {
         [Op.and]: [
-          { service_name: { [Op.notLike]: "%dien%" } },
-          { service_name: { [Op.notLike]: "%nuoc%" } },
+          { service_name: { [Op.notLike]: "%Điện%" } },
+          { service_name: { [Op.notLike]: "%Nước%" } },
         ],
       },
     });
@@ -244,7 +279,7 @@ const generateBatchInvoices = async (req, res, next) => {
     for (const contract of activeContracts) {
       try {
         const existing = await Invoice.findOne({
-          where: { contract_id: contract.id, billing_month },
+          where: { contract_id: contract.id, billing_month: billingMonthDate },
         });
         if (existing) {
           results.skipped.push({ contract_id: contract.id, room: contract.room?.room_number });
@@ -252,28 +287,35 @@ const generateBatchInvoices = async (req, res, next) => {
         }
 
         const meterReading = await MeterReading.findOne({
-          where: { room_id: contract.room_id, billing_month },
+          where: { room_id: contract.room_id, billing_month: billingMonthDate },
         });
+
+        if (!meterReading) {
+          results.errors.push({
+            contract_id: contract.id,
+            room: contract.room?.room_number,
+            reason: `Chua nhap chi so dong ho cho phong ${contract.room?.room_number} ky ${billing_month}.`,
+          });
+          continue;
+        }
 
         let elecAmt = 0;
         let wtrAmt = 0;
 
-        if (meterReading) {
-          const electricityService = await Service.findOne({
-            where: { service_name: { [Op.like]: "%dien%" } },
-          });
-          const waterService = await Service.findOne({
-            where: { service_name: { [Op.like]: "%nuoc%" } },
-          });
+        const electricityService = await Service.findOne({
+          where: { service_name: { [Op.like]: "%Điện%" } },
+        });
+        const waterService = await Service.findOne({
+          where: { service_name: { [Op.like]: "%Nước%" } },
+        });
 
-          if (electricityService) {
-            const used = meterReading.current_electricity - meterReading.prev_electricity;
-            elecAmt = parseFloat((used * parseFloat(electricityService.unit_price)).toFixed(2));
-          }
-          if (waterService) {
-            const used = meterReading.current_water - meterReading.prev_water;
-            wtrAmt = parseFloat((used * parseFloat(waterService.unit_price)).toFixed(2));
-          }
+        if (electricityService) {
+          const used = meterReading.current_electricity - meterReading.prev_electricity;
+          elecAmt = parseFloat((used * parseFloat(electricityService.unit_price)).toFixed(2));
+        }
+        if (waterService) {
+          const used = meterReading.current_water - meterReading.prev_water;
+          wtrAmt = parseFloat((used * parseFloat(waterService.unit_price)).toFixed(2));
         }
 
         // Tinh tien dich vu khac
@@ -284,7 +326,7 @@ const generateBatchInvoices = async (req, res, next) => {
         }
 
         const adjustments = await Adjustment.findAll({
-          where: { contract_id: contract.id, billing_month },
+          where: { contract_id: contract.id, billing_month: billingMonthDate },
         });
 
         let adjAmt = 0;
@@ -298,7 +340,7 @@ const generateBatchInvoices = async (req, res, next) => {
 
         const invoice = await Invoice.create({
           contract_id: contract.id,
-          billing_month,
+          billing_month: billingMonthDate,
           room_price: contract.price_per_month,
           electricity_amount: elecAmt,
           water_amount: wtrAmt,

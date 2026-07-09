@@ -23,10 +23,16 @@ RUN echo 'server { \
     location / { \
         try_files $uri $uri/ /index.html; \
     } \
-    location /api { \
-        proxy_pass http://qlpt_backend:5000/api; \
+    location /api/ { \
+        proxy_pass http://qlpt_backend:5000/api/; \
+        proxy_http_version 1.1; \
+        proxy_set_header Upgrade $http_upgrade; \
+        proxy_set_header Connection "upgrade"; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
+        proxy_cache_bypass $http_upgrade; \
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always; \
+        add_header Pragma "no-cache" always; \
     } \
 }' > /etc/nginx/conf.d/default.conf
 

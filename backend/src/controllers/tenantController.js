@@ -1,7 +1,15 @@
 const { Tenant, Contract, sequelize } = require("../models");
 const { Op } = require("sequelize");
-const { paginateQuery, buildPaginationResponse } = require("../services/helpers");
+const { paginateQuery, buildPaginationResponse, jsonContains } = require("../services/helpers");
 const { getAllTenants } = require("../services/tenantService");
+
+// Trim a string and clamp to max length. Matches VARCHAR(N) limits in Tenant model
+// so callers sending form data with stray whitespace or > N chars don't hit a 500.
+const clampString = (value, max) => {
+  if (value === undefined || value === null) return value;
+  const trimmed = String(value).trim();
+  return trimmed.slice(0, max);
+};
 
 // Helper: check if tenant belongs to any contract under this account
 async function tenantBelongsToAccount(tenantId, accountId, isAdmin) {
@@ -10,7 +18,7 @@ async function tenantBelongsToAccount(tenantId, accountId, isAdmin) {
     where: {
       [Op.or]: [
         { tenant_id: tenantId },
-        { tenant_ids: { [Op.contains]: [tenantId] } },
+        jsonContains("tenant_ids", tenantId),
       ],
       account_id: accountId,
     },
@@ -38,7 +46,7 @@ const getTenantById = async (req, res, next) => {
       where: {
         [Op.or]: [
           { tenant_id: id },
-          { tenant_ids: { [Op.contains]: [id] } },
+          jsonContains("tenant_ids", id),
         ],
         ...(isAdmin ? {} : { account_id: req.user.id }),
       },
@@ -60,8 +68,6 @@ const getAllTenantsHandler = async (req, res, next) => {
       page,
       limit,
       search,
-      accountId: req.user.id,
-      isAdmin: req.user.role === 'admin',
     });
 
     return res.json(buildPaginationResponse(rows, count, page, limit));
@@ -93,6 +99,7 @@ const createTenant = async (req, res, next) => {
 const updateTenant = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const { full_name, citizen_id, phone_number, email, address } = req.body;
     const tenant = await Tenant.findByPk(id);
 
     if (!tenant) {
@@ -100,12 +107,18 @@ const updateTenant = async (req, res, next) => {
     }
 
     const isAdmin = req.user.role === 'admin';
-    const hasAccess = await tenantBelongsToAccount(id, req.user.id, isAdmin);
-    if (!hasAccess) {
-      return res.status(403).json({ message: "Ban khong co quyen sua nguoi thue nay." });
+    const accountActive = req.user.status === 'active';
+    if (!isAdmin && !accountActive) {
+      return res.status(403).json({ message: "Tai khoan khong active, khong the sua nguoi thue." });
     }
 
-    const fields = { full_name, phone_number, email, address };
+    const fields = {
+      full_name: clampString(full_name, 100),
+      citizen_id: clampString(citizen_id, 20),
+      phone_number: clampString(phone_number, 15),
+      email: clampString(email, 100),
+      address: clampString(address, 255),
+    };
     for (const [key, value] of Object.entries(fields)) {
       if (value !== undefined) tenant[key] = value;
     }
@@ -127,18 +140,25 @@ const deleteTenant = async (req, res, next) => {
     }
 
     const isAdmin = req.user.role === 'admin';
-    const hasAccess = await tenantBelongsToAccount(id, req.user.id, isAdmin);
-    if (!hasAccess) {
-      return res.status(403).json({ message: "Ban khong co quyen xoa nguoi thue nay." });
+    const accountActive = req.user.status === 'active';
+    if (!isAdmin && !accountActive) {
+      return res.status(403).json({ message: "Tai khoan khong active, khong the xoa nguoi thue." });
     }
 
+    // Block delete if ANY active contract (across all accounts) still references this tenant.
+    // The contract itself is scoped to an account, but a tenant is shared data — refusing
+    // to delete a tenant still bound to an active contract anywhere prevents data loss.
     const activeContract = await Contract.findOne({
       where: {
-        [Op.or]: [
-          { tenant_id: id, status: "active" },
-          { tenant_ids: { [Op.contains]: [id] }, status: "active" },
+        [Op.and]: [
+          { status: "active" },
+          {
+            [Op.or]: [
+              { tenant_id: id },
+              jsonContains("tenant_ids", id),
+            ],
+          },
         ],
-        ...(isAdmin ? {} : { account_id: req.user.id }),
       },
     });
 
@@ -174,7 +194,7 @@ const getTenantHistory = async (req, res, next) => {
       where: {
         [Op.or]: [
           { tenant_id: id },
-          { tenant_ids: { [Op.contains]: [id] } },
+          jsonContains("tenant_ids", id),
         ],
         ...(isAdmin ? {} : { account_id: req.user.id }),
       },

@@ -46,6 +46,9 @@ services:
       - "5000:5000"
     volumes:
       - ./backend/uploads:/app/uploads
+      - ./backend/src:/app/src
+      - ./backend/.env:/app/.env
+      - ./backend/fonts:/app/fonts
 
   frontend:
     build:

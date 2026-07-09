@@ -17,17 +17,6 @@ const getAllRooms = async (req, res, next) => {
     if (room_type) where.room_type = room_type;
     if (floor) where.floor = parseInt(floor);
 
-    // Multi-tenant: filter rooms that belong to this account via active contracts
-    if (req.user.role !== 'admin') {
-      where.id = {
-        [Op.in]: [
-          sequelize.literal(
-            `SELECT room_id FROM contracts WHERE account_id = ${parseInt(req.user.id)}`
-          ),
-        ],
-      };
-    }
-
     const { rows, count } = await Room.findAndCountAll({
       where,
       order: [["floor", "ASC"], ["room_number", "ASC"]],
@@ -225,13 +214,14 @@ const deleteRoom = async (req, res, next) => {
       return res.status(404).json({ message: "Phong khong ton tai." });
     }
 
-    const activeContract = await Contract.findOne({
-      where: { room_id: id, status: "active" },
+    const blockingContract = await Contract.findOne({
+      where: { room_id: id, status: { [Op.in]: ["active", "expired"] } },
     });
 
-    if (activeContract) {
+    if (blockingContract) {
+      const statusLabel = blockingContract.status === "active" ? "dang hieu luc" : "da het han";
       return res.status(400).json({
-        message: "Phong dang co hop dong active. Vui long thanh ly hop dong truoc.",
+        message: `Phong con hop dong ${statusLabel}. Vui long thanh ly hop dong truoc khi xoa phong.`,
       });
     }
 
@@ -294,18 +284,7 @@ const deleteRoomImage = async (req, res, next) => {
 
 const getRoomStats = async (req, res, next) => {
   try {
-    // Multi-tenant: admin sees all, manager sees only their own
-    let where = {};
-    if (req.user.role !== 'admin') {
-      where.id = {
-        [Op.in]: [
-          sequelize.literal(
-            `SELECT room_id FROM contracts WHERE account_id = ${parseInt(req.user.id)}`
-          ),
-        ],
-      };
-    }
-    const allRooms = await Room.findAll({ where: { ...where, status: { [Op.ne]: "inactive" } } });
+    const allRooms = await Room.findAll({ where: { status: { [Op.ne]: "inactive" } } });
     const total = allRooms.length;
     const available = allRooms.filter(r => r.status === "available").length;
     const rented = allRooms.filter(r => r.status === "rented").length;
@@ -319,20 +298,7 @@ const getRoomStats = async (req, res, next) => {
 
 const getRoomTypesStats = async (req, res, next) => {
   try {
-    // Multi-tenant: admin sees all, manager sees only their own
-    let roomWhere = {};
-    if (req.user.role !== 'admin') {
-      roomWhere.id = {
-        [Op.in]: [
-          sequelize.literal(
-            `SELECT room_id FROM contracts WHERE account_id = ${parseInt(req.user.id)}`
-          ),
-        ],
-      };
-    }
-
     const stats = await Room.findAll({
-      where: roomWhere,
       attributes: [
         "room_type",
         [sequelize.fn("COUNT", sequelize.col("id")), "total"],
@@ -364,17 +330,7 @@ const syncRoomStatus = async (req, res, next) => {
     );
 
     // Get rooms that belong to this account
-    let roomWhere = {};
-    if (req.user.role !== 'admin') {
-      roomWhere.id = {
-        [Op.in]: [
-          sequelize.literal(
-            `SELECT room_id FROM contracts WHERE account_id = ${parseInt(req.user.id)}`
-          ),
-        ],
-      };
-    }
-    const rooms = await Room.findAll({ where: { ...roomWhere, status: { [Op.ne]: "inactive" } } });
+    const rooms = await Room.findAll({ where: { status: { [Op.ne]: "inactive" } } });
 
     const results = { fixed: [], errors: [] };
 

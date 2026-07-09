@@ -1,3 +1,17 @@
+const { literal } = require("sequelize");
+
+/**
+ * Build a WHERE condition that matches when a JSON array column contains the given value.
+ * MySQL 8 JSON_CONTAINS(jsonDoc, candidate). Use this instead of `Op.contains`
+ * which Sequelize translates to PostgreSQL's `@>` operator and is invalid for MySQL.
+ *
+ * Usage: where: { [Op.or]: [{ tenant_id: id }, jsonContains("tenant_ids", id)] }
+ */
+const jsonContains = (column, value) => {
+  const json = JSON.stringify([value]);
+  return literal(`JSON_CONTAINS(${column}, '${json.replace(/'/g, "''")}')`);
+};
+
 const getStartOfMonth = (date) => {
   const d = new Date(date);
   return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -69,6 +83,7 @@ const paginateQuery = ({ page = 1, limit = 10 }) => {
 };
 
 module.exports = {
+  jsonContains,
   getStartOfMonth,
   getEndOfMonth,
   formatDate,

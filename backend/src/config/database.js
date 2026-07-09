@@ -10,6 +10,14 @@ const sequelize = new Sequelize(
     port: process.env.DB_PORT,
     dialect: "mysql",
     logging: false,
+    define: { charset: "utf8mb4", collate: "utf8mb4_unicode_ci" },
+    dialectOptions: {
+      charset: "utf8mb4",
+      collate: "utf8mb4_unicode_ci",
+      supportBigNumbers: true,
+    },
+    charset: "utf8mb4",
+    collate: "utf8mb4_unicode_ci",
   }
 );
 

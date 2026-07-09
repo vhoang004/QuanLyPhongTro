@@ -12,11 +12,11 @@ const urlResolverDef = bundle.substring(urlResolverStart, urlResolverEnd + 2);
 const URLResolver = eval("(function() { " + urlResolverDef + "; return URLResolver; })()");
 
 const fonts = {
-  Roboto: {
-    normal: path.join(__dirname, "..", "..", "node_modules", "pdfmake", "fonts", "Roboto", "Roboto-Regular.ttf"),
-    bold: path.join(__dirname, "..", "..", "node_modules", "pdfmake", "fonts", "Roboto", "Roboto-Medium.ttf"),
-    italics: path.join(__dirname, "..", "..", "node_modules", "pdfmake", "fonts", "Roboto", "Roboto-Regular.ttf"),
-    bolditalics: path.join(__dirname, "..", "..", "node_modules", "pdfmake", "fonts", "Roboto", "Roboto-Regular.ttf"),
+  BeVietnamPro: {
+    normal: path.join(__dirname, "..", "..", "fonts", "BeVietnamPro-Regular.ttf"),
+    bold: path.join(__dirname, "..", "..", "fonts", "BeVietnamPro-Bold.ttf"),
+    italics: path.join(__dirname, "..", "..", "fonts", "BeVietnamPro-Regular.ttf"),
+    bolditalics: path.join(__dirname, "..", "..", "fonts", "BeVietnamPro-Bold.ttf"),
   },
 };
 
@@ -107,6 +107,7 @@ const generateInvoicePDF = async (invoiceData) => {
   const docDefinition = {
     pageSize: "A4",
     pageMargins: [50, 50, 50, 50],
+    defaultStyle: { font: "BeVietnamPro" },
     content: [
       { text: "HÓA ĐƠN THANH TOÁN", style: "title" },
       {

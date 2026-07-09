@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { MdApartment, MdPeople, MdReceipt, MdTrendingUp, MdWarning, MdCheckCircle } from 'react-icons/md';
 import api from '../../services/api';
 import { formatCurrency, formatMonth } from '../../utils/format';
@@ -6,36 +7,47 @@ import { formatCurrency, formatMonth } from '../../utils/format';
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const location = useLocation();
+  const fetchSeqRef = useRef(0);
+
+  const fetchData = useCallback(async ({ background = false } = {}) => {
+    if (background) setRefreshing(true);
+    const seq = ++fetchSeqRef.current;
+    try {
+      const [dashRes, revenueRes, debtRes, invoicesRes, contractsRes] = await Promise.all([
+        api.get('/dashboard'),
+        api.get('/dashboard/revenue'),
+        api.get('/dashboard/debt'),
+        api.get('/invoices', { params: { limit: 5, status: '' } }),
+        api.get('/contracts/expiring', { params: { days: 15 } }),
+      ]);
+      // Drop late responses if a newer fetch started.
+      if (seq !== fetchSeqRef.current) return;
+      setStats({
+        rooms: dashRes.data.rooms || {},
+        tenants: dashRes.data.tenants || {},
+        contracts: dashRes.data.contracts || {},
+        revenue: dashRes.data.revenue || {},
+        invoices: dashRes.data.invoices || {},
+        revenueStats: revenueRes.data,
+        debt: debtRes.data,
+        recentInvoices: invoicesRes.data.data || invoicesRes.data.rows || [],
+        expiringContracts: contractsRes.data.contracts || [],
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      if (seq === fetchSeqRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [dashRes, revenueRes, debtRes, invoicesRes, contractsRes] = await Promise.all([
-          api.get('/dashboard'),
-          api.get('/dashboard/revenue'),
-          api.get('/dashboard/debt'),
-          api.get('/invoices', { params: { limit: 5, status: '' } }),
-          api.get('/contracts/expiring', { params: { days: 15 } }),
-        ]);
-        setStats({
-          rooms: dashRes.data.rooms || {},
-          tenants: dashRes.data.tenants || {},
-          contracts: dashRes.data.contracts || {},
-          revenue: dashRes.data.revenue || {},
-          invoices: dashRes.data.invoices || {},
-          revenueStats: revenueRes.data,
-          debt: debtRes.data,
-          recentInvoices: invoicesRes.data.data || invoicesRes.data.rows || [],
-          expiringContracts: contractsRes.data.contracts || [],
-        });
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
-  }, []);
+  }, [fetchData, location.pathname]);
 
   if (loading) {
     return (
@@ -118,18 +130,23 @@ export default function Dashboard() {
             {months.length === 0 ? (
               <p className="text-muted" style={{ textAlign: 'center', padding: 20 }}>Chưa có dữ liệu doanh thu</p>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 140 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 180 }}>
                 {months.map((m) => {
                   const pct = (m.total / maxRevenue) * 100;
                   return (
-                    <div key={m.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <div key={m.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: 4, height: '100%' }}>
+                      <div style={{ fontSize: 11, color: '#374151', fontWeight: 500, minHeight: 14 }}>
+                        {m.total >= 1000000
+                          ? `${(m.total / 1000000).toFixed(1)}tr`
+                          : `${Math.round(m.total / 1000)}k`}
+                      </div>
                       <div style={{
                         width: '100%',
-                        background: '#4f46e5',
+                        background: 'linear-gradient(180deg, #6366f1 0%, #4f46e5 100%)',
                         borderRadius: '4px 4px 0 0',
+                        height: `${Math.max(pct, 2)}%`,
                         minHeight: 4,
-                        height: `${Math.max(pct, 5)}%`,
-                        transition: 'height 0.3s',
+                        transition: 'height 0.3s ease',
                       }} />
                       <span style={{ fontSize: 11, color: '#6b7280' }}>{m.month?.slice(5)}</span>
                     </div>
