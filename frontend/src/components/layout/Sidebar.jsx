@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   MdApartment, MdPeople, MdArticle,
   MdElectricMeter, MdReceipt, MdPayment,
@@ -29,11 +29,26 @@ const allNavItems = managerNavItems;
 export default function Sidebar({ collapsed = false }) {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
-  
+
   const isAdmin = user?.role === 'admin';
   const navItems = isAdmin ? adminNavItems : allNavItems;
+
+  const handleLogout = async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c12ae2'},body:JSON.stringify({sessionId:'c12ae2',location:'Sidebar.jsx:logout',message:'Sidebar logout start',runId:'post-fix',hypothesisId:'H6',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    try {
+      await logout();
+    } finally {
+      // #region agent log
+      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c12ae2'},body:JSON.stringify({sessionId:'c12ae2',location:'Sidebar.jsx:logout',message:'Sidebar logout completed, navigating',runId:'post-fix',hypothesisId:'H6',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      navigate('/login', { replace: true });
+    }
+  };
 
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
@@ -74,7 +89,7 @@ export default function Sidebar({ collapsed = false }) {
       <div className="sidebar-footer">
         <div
           className="nav-item"
-          onClick={() => { logout(); window.location.href = '/login'; }}
+          onClick={handleLogout}
           style={{ cursor: 'pointer' }}
           title={collapsed ? 'Đăng xuất' : undefined}
         >

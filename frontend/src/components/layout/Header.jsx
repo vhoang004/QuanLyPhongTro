@@ -31,6 +31,21 @@ export default function Header() {
   const menuRef = useRef(null);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
+  const handleLogout = async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c12ae2'},body:JSON.stringify({sessionId:'c12ae2',location:'Header.jsx:logout',message:'Header logout start',runId:'post-fix',hypothesisId:'H6',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    setShowUserMenu(false);
+    try {
+      await logout();
+    } finally {
+      // #region agent log
+      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c12ae2'},body:JSON.stringify({sessionId:'c12ae2',location:'Header.jsx:logout',message:'Header logout completed, navigating',runId:'post-fix',hypothesisId:'H6',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      navigate('/login', { replace: true });
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -108,7 +123,7 @@ export default function Header() {
                 <MdLock size={16} /> Đổi mật khẩu
               </button>
               <button
-                onClick={() => { logout(); navigate('/login'); }}
+                onClick={handleLogout}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, width: '100%',
                   padding: '10px 16px', border: 'none', background: 'none',

@@ -9,14 +9,6 @@ export default function Login() {
   const { user, login, loading } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!loading && user) {
-      navigate(user.role === 'admin' ? '/accounts' : '/dashboard', { replace: true });
-    }
-  }, [loading, user, navigate]);
-
-  if (loading) return null;
-  if (user) return null;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -33,6 +25,19 @@ export default function Login() {
   const [forgotMsg, setForgotMsg] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotError, setForgotError] = useState('');
+
+  useEffect(() => {
+    if (!loading && user) {
+      navigate(user.role === 'admin' ? '/accounts' : '/dashboard', { replace: true });
+    }
+  }, [loading, user, navigate]);
+
+  // #region agent log
+  fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c12ae2'},body:JSON.stringify({sessionId:'c12ae2',location:'Login.jsx:32',message:'Login render post-fix',data:{loading, hasUser:!!user},runId:'post-fix',hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
+  if (loading) return null;
+  if (user) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
