@@ -143,6 +143,10 @@ const recordBatchMeterReadings = async (req, res, next) => {
   try {
     const { readings, billing_month } = req.body;
 
+    // #region agent log
+    fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'meterReadingController.js:145',message:'batch endpoint entered',data:{readingsCount:readings?.length,billing_month,readings:readings?.map(r=>({room_id:r.room_id,current_electricity:r.current_electricity,current_water:r.current_water}))},hypothesisId:'H1',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     if (!readings || !Array.isArray(readings) || readings.length === 0) {
       return res.status(400).json({ message: "Danh sach doc so rong." });
     }
@@ -198,10 +202,16 @@ const recordBatchMeterReadings = async (req, res, next) => {
         const waterUsed = current_water - prevWatr;
 
         if (current_electricity < prevElec || current_electricity < 0) {
+          // #region agent log
+          fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'meterReadingController.js:201',message:'electricity validation failed',data:{room_id,current_electricity,prevElec,reason:current_electricity<0?'negative':current_electricity<prevElec?'less_than_prev':'unknown'},hypothesisId:'H1',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           errors.push({ room_id: room.room_number, message: `Chi so dien khong hop le (cu: ${prevElec}).` });
           continue;
         }
         if (current_water < prevWatr || current_water < 0) {
+          // #region agent log
+          fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'meterReadingController.js:206',message:'water validation failed',data:{room_id,current_water,prevWatr,reason:current_water<0?'negative':current_water<prevWatr?'less_than_prev':'unknown'},hypothesisId:'H1',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           errors.push({ room_id: room.room_number, message: `Chi so nuoc khong hop le (cu: ${prevWatr}).` });
           continue;
         }
@@ -249,6 +259,9 @@ const recordBatchMeterReadings = async (req, res, next) => {
       errors,
       unit_prices: servicePrices,
     });
+    // #region agent log
+    fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'meterReadingController.js:250',message:'batch response sent',data:{resultsCount:results.length,errorsCount:errors.length,totalReadings:readings.length,errors:errors},hypothesisId:'H1',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
   } catch (error) {
     next(error);
   }

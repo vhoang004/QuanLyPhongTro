@@ -141,14 +141,23 @@ export default function MeterReadings() {
 
     setSaving(true);
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'MeterReadings.jsx:143',message:'handleSaveBatch sending',data:{readingsCount:readingsToSave.length,readings:readingsToSave},hypothesisId:'H2',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const res = await meterReadingService.createBatch({
         readings: readingsToSave,
         billing_month: batchMonth,
       });
+      // #region agent log
+      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'MeterReadings.jsx:148',message:'handleSaveBatch response',data:{status:res.status,message:res.data?.message,resultsCount:res.data?.results?.length,errorsCount:res.data?.errors?.length,errors:res.data?.errors},hypothesisId:'H2',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       addToast(res.data.message || 'Ghi chỉ số thành công', 'success');
       setShowBatchModal(false);
       fetchReadings();
     } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'MeterReadings.jsx:152',message:'handleSaveBatch error caught',data:{errMessage:err.message,errResponse:err.response?.data},hypothesisId:'H2',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       addToast(err.response?.data?.message || 'Lỗi khi lưu chỉ số', 'error');
     } finally { setSaving(false); }
   };

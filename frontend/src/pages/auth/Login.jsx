@@ -32,10 +32,6 @@ export default function Login() {
     }
   }, [loading, user, navigate]);
 
-  // #region agent log
-  fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c12ae2'},body:JSON.stringify({sessionId:'c12ae2',location:'Login.jsx:32',message:'Login render post-fix',data:{loading, hasUser:!!user},runId:'post-fix',hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   if (loading) return null;
   if (user) return null;
 
