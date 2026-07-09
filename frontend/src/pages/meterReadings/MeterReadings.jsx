@@ -23,6 +23,7 @@ export default function MeterReadings() {
   const [roomsData, setRoomsData] = useState([]);
   const [roomReadings, setRoomReadings] = useState({});
   const [saving, setSaving] = useState(false);
+  const [batchErrors, setBatchErrors] = useState([]);
 
   const fetchReadings = async () => {
     setLoading(true);
@@ -88,12 +89,14 @@ export default function MeterReadings() {
     const today = new Date();
     const defaultMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
     setBatchMonth(defaultMonth);
+    setBatchErrors([]);
     setShowBatchModal(true);
     fetchRoomsForBatch(defaultMonth);
   };
 
   const handleBatchMonthChange = (month) => {
     setBatchMonth(month);
+    setBatchErrors([]);
     fetchRoomsForBatch(month);
   };
 
@@ -142,23 +145,30 @@ export default function MeterReadings() {
     setSaving(true);
     try {
       // #region agent log
-      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'MeterReadings.jsx:143',message:'handleSaveBatch sending',data:{readingsCount:readingsToSave.length,readings:readingsToSave},hypothesisId:'H2',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'MeterReadings.jsx:144',message:'handleSaveBatch sending',data:{readingsCount:readingsToSave.length},hypothesisId:'H2',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       const res = await meterReadingService.createBatch({
         readings: readingsToSave,
         billing_month: batchMonth,
       });
       // #region agent log
-      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'MeterReadings.jsx:148',message:'handleSaveBatch response',data:{status:res.status,message:res.data?.message,resultsCount:res.data?.results?.length,errorsCount:res.data?.errors?.length,errors:res.data?.errors},hypothesisId:'H2',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'MeterReadings.jsx:149',message:'handleSaveBatch response',data:{status:res.status,message:res.data?.message,resultsCount:res.data?.results?.length,errorsCount:res.data?.errors?.length,errors:res.data?.errors},hypothesisId:'H2',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       addToast(res.data.message || 'Ghi chỉ số thành công', 'success');
+      setBatchErrors([]);
       setShowBatchModal(false);
       fetchReadings();
     } catch (err) {
+      const errData = err.response?.data;
       // #region agent log
-      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'MeterReadings.jsx:152',message:'handleSaveBatch error caught',data:{errMessage:err.message,errResponse:err.response?.data},hypothesisId:'H2',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'MeterReadings.jsx:154',message:'handleSaveBatch error caught',data:{status:err.response?.status,errMessage:errData?.message,errorsCount:errData?.errors?.length,errors:errData?.errors},hypothesisId:'H2',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
       // #endregion
-      addToast(err.response?.data?.message || 'Lỗi khi lưu chỉ số', 'error');
+      if (errData?.errors && Array.isArray(errData.errors) && errData.errors.length > 0) {
+        setBatchErrors(errData.errors);
+        addToast(errData.message || 'Có chỉ số không hợp lệ, vui lòng kiểm tra lại', 'error');
+      } else {
+        addToast(errData?.message || 'Lỗi khi lưu chỉ số', 'error');
+      }
     } finally { setSaving(false); }
   };
 
@@ -290,7 +300,7 @@ export default function MeterReadings() {
           size="xl"
           footer={
             <>
-              <button className="btn btn-secondary" onClick={() => setShowBatchModal(false)}>Hủy</button>
+              <button className="btn btn-secondary" onClick={() => { setBatchErrors([]); setShowBatchModal(false); }}>Hủy</button>
               <button className="btn btn-primary" onClick={handleSaveBatch} disabled={saving}>
                 {saving ? 'Đang lưu...' : <><MdSave /> Lưu tất cả</>}
               </button>
@@ -307,6 +317,21 @@ export default function MeterReadings() {
               onChange={(e) => handleBatchMonthChange(e.target.value)}
             />
           </div>
+
+          {batchErrors.length > 0 && (
+            <div style={{ marginBottom: 16, padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8 }}>
+              <div style={{ fontWeight: 700, color: '#b91c1c', marginBottom: 8 }}>
+                ⚠️ Có {batchErrors.length} chỉ số không hợp lệ - không lưu được:
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 20, color: '#7f1d1d' }}>
+                {batchErrors.map((e, i) => (
+                  <li key={i} style={{ marginBottom: 4 }}>
+                    <strong>Phòng {e.room_id}:</strong> {e.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: 13 }}>
             <span style={{ color: '#d97706' }}>💡 Đơn giá điện: <strong>{servicePrices.electricity.toLocaleString()} đ/kWh</strong></span>

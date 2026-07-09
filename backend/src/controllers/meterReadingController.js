@@ -253,6 +253,17 @@ const recordBatchMeterReadings = async (req, res, next) => {
       }
     }
 
+    // Atomic: if ANY reading is invalid, reject the entire batch (do not save anything)
+    if (errors.length > 0) {
+      // #region agent log
+      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'meterReadingController.js:256',message:'batch rejected atomically',data:{errorsCount:errors.length,errors},hypothesisId:'H1',runId:req.headers['x-debug-run-id']||'initial',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      return res.status(400).json({
+        message: `Co ${errors.length} chi so khong hop le. Vui long kiem tra lai.`,
+        errors,
+      });
+    }
+
     return res.json({
       message: `Ghi ${results.length}/${readings.length} chi so thanh cong.`,
       results,
