@@ -143,10 +143,6 @@ const recordBatchMeterReadings = async (req, res, next) => {
   try {
     const { readings, billing_month } = req.body;
 
-    // #region agent log
-    fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'meterReadingController.js:145',message:'batch endpoint entered',data:{readingsCount:readings?.length,billing_month,readings:readings?.map(r=>({room_id:r.room_id,current_electricity:r.current_electricity,current_water:r.current_water}))},hypothesisId:'H1',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     if (!readings || !Array.isArray(readings) || readings.length === 0) {
       return res.status(400).json({ message: "Danh sach doc so rong." });
     }
@@ -154,7 +150,7 @@ const recordBatchMeterReadings = async (req, res, next) => {
       return res.status(400).json({ message: "Vui long chon ky thang." });
     }
 
-    const results = [];
+    const validated = [];
     const errors = [];
 
     const servicePrices = await getServicePrices();
@@ -179,67 +175,90 @@ const recordBatchMeterReadings = async (req, res, next) => {
       });
     }
 
+    // Phase 1: validate ALL readings without writing anything.
+    // Collect valid items + errors. If any error, reject the whole batch.
     for (const reading of readings) {
-      try {
+      const { room_id, current_electricity, current_water } = reading;
+
+      if (!room_id || current_electricity === undefined || current_water === undefined) {
+        errors.push({ room_id, message: "Thong tin khong day du." });
+        continue;
+      }
+
+      const room = roomsMap[room_id];
+      if (!room) {
+        errors.push({ room_id, message: "Phong khong ton tai." });
+        continue;
+      }
+
+      const prevReading = prevReadingsMap[room_id];
+      const prevElec = prevReading ? prevReading.current_electricity : 0;
+      const prevWatr = prevReading ? prevReading.current_water : 0;
+
+      if (current_electricity < prevElec || current_electricity < 0) {
+        errors.push({ room_id: room.room_number, message: `Chi so dien khong hop le (cu: ${prevElec}).` });
+        continue;
+      }
+      if (current_water < prevWatr || current_water < 0) {
+        errors.push({ room_id: room.room_number, message: `Chi so nuoc khong hop le (cu: ${prevWatr}).` });
+        continue;
+      }
+
+      validated.push({ reading, room, prevElec, prevWatr });
+    }
+
+    // Atomic: if ANY reading is invalid, reject the entire batch (no DB writes happen).
+    if (errors.length > 0) {
+      return res.status(400).json({
+        message: `Co ${errors.length} chi so khong hop le. Vui long kiem tra lai.`,
+        errors,
+      });
+    }
+
+    // Load existing readings for the same billing_month in ONE query
+    // (only after validation passes).
+    const existingReadingsMap = {};
+    if (roomIds.length > 0) {
+      const existingReadings = await MeterReading.findAll({
+        where: { room_id: { [Op.in]: [...new Set(roomIds)] }, billing_month },
+      });
+      existingReadings.forEach(r => { existingReadingsMap[r.room_id] = r; });
+    }
+
+    // Phase 2: persist all validated readings inside a transaction.
+    // If any single write fails, the entire batch is rolled back so the DB
+    // stays consistent - no partial saves.
+    const results = await sequelize.transaction(async (t) => {
+      const out = [];
+      for (const { reading, room, prevElec, prevWatr } of validated) {
         const { room_id, current_electricity, current_water } = reading;
-
-        if (!room_id || current_electricity === undefined || current_water === undefined) {
-          errors.push({ room_id, message: "Thong tin khong day du." });
-          continue;
-        }
-
-        const room = roomsMap[room_id];
-        if (!room) {
-          errors.push({ room_id, message: "Phong khong ton tai." });
-          continue;
-        }
-
-        const prevReading = prevReadingsMap[room_id];
-        const prevElec = prevReading ? prevReading.current_electricity : 0;
-        const prevWatr = prevReading ? prevReading.current_water : 0;
-
         const elecUsed = current_electricity - prevElec;
         const waterUsed = current_water - prevWatr;
 
-        if (current_electricity < prevElec || current_electricity < 0) {
-          // #region agent log
-          fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'meterReadingController.js:201',message:'electricity validation failed',data:{room_id,current_electricity,prevElec,reason:current_electricity<0?'negative':current_electricity<prevElec?'less_than_prev':'unknown'},hypothesisId:'H1',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-          errors.push({ room_id: room.room_number, message: `Chi so dien khong hop le (cu: ${prevElec}).` });
-          continue;
-        }
-        if (current_water < prevWatr || current_water < 0) {
-          // #region agent log
-          fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'meterReadingController.js:206',message:'water validation failed',data:{room_id,current_water,prevWatr,reason:current_water<0?'negative':current_water<prevWatr?'less_than_prev':'unknown'},hypothesisId:'H1',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-          errors.push({ room_id: room.room_number, message: `Chi so nuoc khong hop le (cu: ${prevWatr}).` });
-          continue;
-        }
-
-        const existing = await MeterReading.findOne({
-          where: { room_id, billing_month },
-        });
-
         let meterReading;
-        if (existing) {
+        if (existingReadingsMap[room_id]) {
+          const existing = existingReadingsMap[room_id];
           existing.prev_electricity = prevElec;
           existing.current_electricity = current_electricity;
           existing.prev_water = prevWatr;
           existing.current_water = current_water;
-          await existing.save();
+          await existing.save({ transaction: t });
           meterReading = existing;
         } else {
-          meterReading = await MeterReading.create({
-            room_id,
-            billing_month,
-            prev_electricity: prevElec,
-            current_electricity,
-            prev_water: prevWatr,
-            current_water,
-          });
+          meterReading = await MeterReading.create(
+            {
+              room_id,
+              billing_month,
+              prev_electricity: prevElec,
+              current_electricity,
+              prev_water: prevWatr,
+              current_water,
+            },
+            { transaction: t }
+          );
         }
 
-        results.push({
+        out.push({
           ...meterReading.toJSON(),
           room_number: room.room_number,
           electricity_used: elecUsed,
@@ -248,31 +267,16 @@ const recordBatchMeterReadings = async (req, res, next) => {
           water_cost: waterUsed * servicePrices.water,
           unit_prices: servicePrices,
         });
-      } catch (err) {
-        errors.push({ room_id: reading.room_id, message: err.message });
       }
-    }
-
-    // Atomic: if ANY reading is invalid, reject the entire batch (do not save anything)
-    if (errors.length > 0) {
-      // #region agent log
-      fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'meterReadingController.js:256',message:'batch rejected atomically',data:{errorsCount:errors.length,errors},hypothesisId:'H1',runId:req.headers['x-debug-run-id']||'initial',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      return res.status(400).json({
-        message: `Co ${errors.length} chi so khong hop le. Vui long kiem tra lai.`,
-        errors,
-      });
-    }
+      return out;
+    });
 
     return res.json({
       message: `Ghi ${results.length}/${readings.length} chi so thanh cong.`,
       results,
-      errors,
+      errors: [],
       unit_prices: servicePrices,
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7691/ingest/b7170261-fdc1-4338-8711-7e3024e1f6c4',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'695c29'},body:JSON.stringify({sessionId:'695c29',location:'meterReadingController.js:250',message:'batch response sent',data:{resultsCount:results.length,errorsCount:errors.length,totalReadings:readings.length,errors:errors},hypothesisId:'H1',runId:'initial',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
   } catch (error) {
     next(error);
   }
